@@ -70,10 +70,24 @@ def run(src, ours_path, jar_url, out_path):
     base = final_url.rsplit("/", 1)[0] + "/"
     text = re.sub(r'"\./', '"' + base, text)
     cfg = json.loads(text)
+    absolutize(cfg, base)
     if "urls" in cfg and "sites" not in cfg:
         # The source is itself a multi-repo list: merge into its first repo.
         return run(cfg["urls"][0]["url"], ours_path, jar_url, out_path)
     merge(cfg, ours_path, jar_url, out_path, src)
+
+
+REL = re.compile(r"^[\w\-./%]+\.(txt|json|js|py)$")
+
+
+def absolutize(cfg, base):
+    """Rewrites bare relative file paths inside site "ext" objects (e.g. "tvfan/Cloud-drive.txt")."""
+    for site in cfg.get("sites", []):
+        ext = site.get("ext")
+        if isinstance(ext, dict):
+            for k, v in ext.items():
+                if isinstance(v, str) and "://" not in v and REL.match(v):
+                    ext[k] = urllib.parse.urljoin(base, v)
 
 
 def merge(cfg, ours_path, jar_url, out_path, src):
