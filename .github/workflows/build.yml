@@ -35,6 +35,21 @@ jobs:
           name: tvsource-dist
           path: dist/
 
+      # 一次性合并：main 上还没有 merged.json 时，合并饭太硬配置 + 本仓库站点（之后保持不变，可手动运行 merge-once 更新）
+      - name: One-time merge (饭太硬 + 小红书/B站)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && hashFiles('merged.json') == ''
+        continue-on-error: true
+        run: |
+          pip install pycryptodome
+          python tools/merge_once.py "http://www.饭太硬.net/tv" config.template.json \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/dist/custom_spider.jar" merged.json
+          cp merged.json dist/merged.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add merged.json
+          git commit -m "Add merged.json (one-time merge of 饭太硬 config)"
+          git push origin HEAD:main
+
       # main 分支：把 dist/ 发布到 dist 分支，供 FongMi/TV 直接填写配置地址
       - name: Publish to dist branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
