@@ -22,6 +22,8 @@
    ```
    （国内网络可改用 jsDelivr 镜像 `https://cdn.jsdelivr.net/gh/lofxf/xhs-android-tv@dist/config.json`，注意其分支缓存约 12 小时。
    `dist` 分支由 GitHub Actions 在 `main` 分支每次 push 后自动生成；也可以把 `dist/` 目录放到任意 HTTP 服务器 / U 盘上用 `file://` 地址。）
+   **多仓（和其它配置一起用）**：填 `https://raw.githubusercontent.com/lofxf/xhs-android-tv/dist/depot.json`，
+   FongMi 会列出仓库（默认包含「饭太硬」和「小红书/B站」）供选择；要增删仓库请修改根目录的 `depot.json`。
 3. 首页切换站点到「小红书」，进入最后一个分类 **「扫码登录」**，海报上就是登录二维码：
    用手机小红书 App「扫一扫」扫码并确认，状态会在后台自动轮询，登录成功后切换到其它分类即可浏览。
    二维码约 3 分钟过期，重新进入该分类会自动刷新。

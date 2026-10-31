@@ -1,0 +1,12 @@
+{
+  "urls": [
+    {
+      "name": "饭太硬",
+      "url": "http://www.饭太硬.net/tv"
+    },
+    {
+      "name": "小红书/B站",
+      "url": "https://raw.githubusercontent.com/lofxf/xhs-android-tv/dist/config.json"
+    }
+  ]
+}

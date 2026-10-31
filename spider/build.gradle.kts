@@ -45,6 +45,7 @@ tasks.register("spiderJar") {
         File(dist, "custom_spider.jar.md5").writeText(md5)
         val template = rootProject.file("config.template.json").readText()
         File(dist, "config.json").writeText(template.replace("{{MD5}}", md5))
+        rootProject.file("depot.json").copyTo(File(dist, "depot.json"), overwrite = true)
         println("custom_spider.jar md5=$md5 -> ${dist.path}")
     }
 }
