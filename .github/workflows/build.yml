@@ -40,8 +40,8 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && hashFiles('merged.json') == ''
         continue-on-error: true
         run: |
-          pip install pycryptodome
-          python tools/merge_once.py "http://www.饭太硬.net/tv" config.template.json \
+          pip install --user --break-system-packages pycryptodome || pip install pycryptodome || true
+          python3 tools/merge_once.py "http://www.饭太硬.net/tv" config.template.json \
             "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/dist/custom_spider.jar" merged.json
           cp merged.json dist/merged.json
           git config user.name "github-actions[bot]"
