@@ -46,6 +46,7 @@ tasks.register("spiderJar") {
         val template = rootProject.file("config.template.json").readText()
         File(dist, "config.json").writeText(template.replace("{{MD5}}", md5))
         rootProject.file("depot.json").copyTo(File(dist, "depot.json"), overwrite = true)
+        rootProject.file("merged.json").takeIf { it.exists() }?.copyTo(File(dist, "merged.json"), overwrite = true)
         println("custom_spider.jar md5=$md5 -> ${dist.path}")
     }
 }

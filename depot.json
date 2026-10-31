@@ -7,6 +7,10 @@
     {
       "name": "小红书/B站",
       "url": "https://raw.githubusercontent.com/lofxf/xhs-android-tv/dist/config.json"
+    },
+    {
+      "name": "饭太硬+小红书/B站（合并）",
+      "url": "https://raw.githubusercontent.com/lofxf/xhs-android-tv/dist/merged.json"
     }
   ]
 }

@@ -1,0 +1,43 @@
+name: Merge external config (one-time)
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "要合并的配置地址"
+        default: "http://www.饭太硬.net/tv"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pycryptodome
+      - name: Merge
+        run: |
+          python tools/merge_once.py "${{ inputs.source }}" config.template.json \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/dist/custom_spider.jar" merged.json
+          python -c "import json;d=json.load(open('merged.json'));print([s['name'] for s in d['sites']][:40])"
+      - name: Commit merged.json to main and dist
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp merged.json /tmp/merged.json
+          git add merged.json
+          git commit -m "Update merged.json from ${{ inputs.source }}" || echo "no change"
+          git push origin HEAD:main
+          git fetch origin dist
+          git checkout -B dist origin/dist
+          cp /tmp/merged.json merged.json
+          git add merged.json
+          git commit -m "Add merged.json" || echo "no change"
+          git push origin dist
