@@ -18,9 +18,9 @@
 1. 在 Fire TV 上安装 [FongMi/TV](https://github.com/FongMi/TV/releases)（leanback 版本 apk，可用 Downloader 等工具侧载）。
 2. 在 FongMi/TV 的「设置 → 点播」中填写配置地址：
    ```
-   https://cdn.jsdelivr.net/gh/lofxf/xhs-android-tv@dist/config.json
+   https://raw.githubusercontent.com/lofxf/xhs-android-tv/dist/config.json
    ```
-   （或 `https://raw.githubusercontent.com/lofxf/xhs-android-tv/dist/config.json`。
+   （国内网络可改用 jsDelivr 镜像 `https://cdn.jsdelivr.net/gh/lofxf/xhs-android-tv@dist/config.json`，注意其分支缓存约 12 小时。
    `dist` 分支由 GitHub Actions 在 `main` 分支每次 push 后自动生成；也可以把 `dist/` 目录放到任意 HTTP 服务器 / U 盘上用 `file://` 地址。）
 3. 首页切换站点到「小红书」，进入最后一个分类 **「扫码登录」**，海报上就是登录二维码：
    用手机小红书 App「扫一扫」扫码并确认，状态会在后台自动轮询，登录成功后切换到其它分类即可浏览。
@@ -29,7 +29,7 @@
 
 > 也可以把这两个站点合并进你已有的 TVBox 配置：把 `dist/custom_spider.jar` 作为某个站点的独立 `jar`：
 > ```json
-> {"key":"csp_Xhs","name":"小红书","type":3,"api":"csp_Xhs","searchable":1,"quickSearch":1,"jar":"https://cdn.jsdelivr.net/gh/lofxf/xhs-android-tv@dist/custom_spider.jar"}
+> {"key":"csp_Xhs","name":"小红书","type":3,"api":"csp_Xhs","searchable":1,"quickSearch":1,"jar":"https://raw.githubusercontent.com/lofxf/xhs-android-tv/dist/custom_spider.jar"}
 > ```
 
 ## 实现说明
