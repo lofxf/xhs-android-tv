@@ -17,7 +17,17 @@ import urllib.request
 UA = "okhttp/3.15"
 
 
+def ascii_url(url):
+    """Encodes internationalized domain names (e.g. www.饭太硬.net) with IDNA/punycode."""
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname.encode("idna").decode()
+    netloc = host + (":%d" % parts.port if parts.port else "")
+    path = urllib.parse.quote(parts.path, safe="/%")
+    return urllib.parse.urlunsplit((parts.scheme, netloc, path, parts.query, parts.fragment))
+
+
 def fetch(url):
+    url = ascii_url(url)
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read(), r.geturl()
