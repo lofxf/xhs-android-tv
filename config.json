@@ -1,0 +1,24 @@
+{
+  "spider": "./custom_spider.jar;md5;022468c759e3665fb7330ff952ecdd3e",
+  "wallpaper": "",
+  "sites": [
+    {
+      "key": "csp_Xhs",
+      "name": "小红书",
+      "type": 3,
+      "api": "csp_Xhs",
+      "searchable": 1,
+      "quickSearch": 1,
+      "changeable": 0
+    },
+    {
+      "key": "csp_BiliWeb",
+      "name": "哔哩哔哩",
+      "type": 3,
+      "api": "csp_BiliWeb",
+      "searchable": 1,
+      "quickSearch": 1,
+      "changeable": 0
+    }
+  ]
+}
