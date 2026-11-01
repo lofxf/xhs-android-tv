@@ -57,7 +57,7 @@ public final class QrLogin {
     private void refresh() {
         try {
             String text = backend.create();
-            imageUrl = ImageServer.publish(name, QrImage.png(text, 600));
+            imageUrl = ImageServer.publish(name, QrImage.poster(text, 720));
             createdAt = System.currentTimeMillis();
             state = WAITING;
             status = "等待扫码";
