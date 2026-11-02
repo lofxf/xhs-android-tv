@@ -1,7 +1,8 @@
-name: Build 小红书TV (FongMi fork)
+name: Build 小红书TV (FongMi repack)
 
-# 从 FongMi/TV 源码编译一个可与原版并存的「小红书TV」：
-# 包名 com.fongmi.android.tv.xhs，默认点播配置为本仓库的 小红书/B站 config.json
+# 基于 FongMi 官方发布的 leanback-armeabi_v7a.apk 重新打包：
+# 包名 com.fongmi.android.tv.xhs（与原版并存）、应用名「小红书TV」、独立图标/横幅。
+# FongMi 源码依赖作者自建、未公开的 mpv/ffmpeg 预编译库，无法直接从源码编译，所以采用重打包。
 on:
   push:
     branches: [main]
@@ -11,82 +12,78 @@ on:
 permissions:
   contents: write
 
+env:
+  APKTOOL_VERSION: "2.12.1"
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
-      - name: Checkout FongMi/TV
-        run: |
-          git clone https://github.com/FongMi/TV.git fongmi-src
-          git -C fongmi-src checkout "$(cat fongmi/REF)"
-          git -C fongmi-src log -1 --format='FongMi/TV %H %s'
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Download FongMi + apktool
+        run: |
+          VERSION="$(cat fongmi/VERSION)"
+          mkdir -p work
+          curl -fsSL -o work/original.apk "https://github.com/FongMi/Release/releases/download/${VERSION}/leanback-armeabi_v7a.apk"
+          curl -fsSL -o work/apktool.jar "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar"
+          sha256sum work/original.apk work/apktool.jar
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Patch (包名 / 应用名 / 默认配置)
-        run: python3 fongmi/patch.py fongmi-src "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/dist/config.json"
+      - name: Decode + patch
+        run: |
+          java -jar work/apktool.jar d -f -o work/decoded work/original.apk
+          python3 fongmi/repack.py work/decoded fongmi/res
 
-      - name: Signing + local.properties
+      - name: Rebuild
+        run: java -jar work/apktool.jar b -o work/unsigned.apk work/decoded
+
+      - name: Sign
         env:
           KEYSTORE_B64: ${{ secrets.FONGMI_KEYSTORE_BASE64 }}
           KEYSTORE_PASS: ${{ secrets.FONGMI_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.FONGMI_KEY_ALIAS }}
         run: |
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          echo "build-tools: $BT"
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.ks"
           else
-            # 未配置私有证书：临时生成一次性证书（可安装，但之后升级需先卸载旧版）
             echo "::warning::未设置 FONGMI_KEYSTORE_BASE64，使用临时签名证书，升级前需卸载旧版"
             KEYSTORE_PASS="$(openssl rand -hex 16)"
             KEY_ALIAS=xhstv
-            keytool -genkeypair -keystore "$RUNNER_TEMP/release.jks" -storepass "$KEYSTORE_PASS" \
+            keytool -genkeypair -keystore "$RUNNER_TEMP/release.ks" -storetype PKCS12 -storepass "$KEYSTORE_PASS" \
               -keypass "$KEYSTORE_PASS" -alias "$KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 36500 \
               -dname "CN=XhsTV sideload"
           fi
-          cat > fongmi-src/local.properties <<PROPS
-          sdk.dir=$ANDROID_HOME
-          storeFile=$RUNNER_TEMP/release.jks
-          keyAlias=$KEY_ALIAS
-          storePassword=$KEYSTORE_PASS
-          PROPS
-          sed -i 's/^ *//' fongmi-src/local.properties
-
-      - name: Build leanback armeabi-v7a release APK
-        working-directory: fongmi-src
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace :app:assembleLeanbackRelease
-          mkdir -p ../out
-          find app/build/outputs -name '*.apk' -print
-          for f in $(find app/build/outputs -name '*.apk'); do
-            case "$f" in
-              *armeabi*v7a*|*armeabi_v7a*) cp "$f" ../out/XhsTV-leanback-armeabi-v7a.apk ;;
-            esac
-          done
-          ls -la ../out
-          test -n "$(ls ../out)"
+          mkdir -p out
+          "$BT/zipalign" -P 16 -f 4 work/unsigned.apk work/aligned.apk
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/release.ks" --ks-pass "pass:$KEYSTORE_PASS" \
+            --ks-key-alias "$KEY_ALIAS" --key-pass "pass:$KEYSTORE_PASS" \
+            --out out/XhsTV-leanback-armeabi-v7a.apk work/aligned.apk
+          "$BT/apksigner" verify --print-certs out/XhsTV-leanback-armeabi-v7a.apk | head -3
+          "$BT/aapt2" dump badging out/XhsTV-leanback-armeabi-v7a.apk | grep -E "^package:|application-label:|leanback" | head -5
+          rm -f "$RUNNER_TEMP/release.ks"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: XhsTV-leanback
+          name: XhsTV-leanback-armeabi-v7a
           path: out/*.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: fongmi-xhs
-          name: 小红书TV（FongMi 改版）
+          name: 小红书TV（FongMi ${{ env.VERSION }} 改版）
           make_latest: false
           body: |
-            基于 FongMi/TV `${{ github.sha }}` 构建，可与原版 FongMi 并存（包名 `com.fongmi.android.tv.xhs`）。
-            应用名「小红书TV」，独立图标与 Fire TV 横幅；首次打开自动使用本仓库的小红书/B站配置。
-            仅提供 Fire TV / Android TV 用的 leanback armeabi-v7a 版本。
+            基于 FongMi ${{ env.VERSION }} 官方 leanback-armeabi_v7a 重新打包，可与原版 FongMi 并存（包名 `com.fongmi.android.tv.xhs`）。
+            应用名「小红书TV」，独立图标与 Fire TV 横幅。首次打开后在「设置 → 点播」填入：
+            `https://raw.githubusercontent.com/${{ github.repository }}/dist/config.json`
           files: out/*.apk

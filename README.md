@@ -79,15 +79,16 @@ config.template.json
 
 想和原来的 FongMi 分开用（原版继续用饭太硬等配置），可以装这个改版：
 
-- 由 `.github/workflows/fongmi.yml` 从 FongMi/TV 源码（版本见 `fongmi/REF`）编译，补丁见 `fongmi/patch.py`：
-  包名改为 `com.fongmi.android.tv.xhs`（与原版并存）、应用名「小红书TV」、独立图标/横幅（`fongmi/make_icons.py` 生成）、
-  首次打开默认点播配置为本仓库的 `config.json`。
+- 由 `.github/workflows/fongmi.yml` 下载 FongMi 官方 `leanback-armeabi_v7a.apk`（版本见 `fongmi/VERSION`），
+  用 apktool 重新打包（`fongmi/repack.py`）：包名改为 `com.fongmi.android.tv.xhs`（与原版并存）、应用名「小红书TV」、
+  独立图标/横幅（`fongmi/make_icons.py` 生成）。
+  （FongMi 源码依赖作者未公开的 mpv/ffmpeg 预编译库，无法从源码编译，所以采用重打包。）
 - 下载：[Releases → fongmi-xhs](https://github.com/lofxf/xhs-android-tv/releases/tag/fongmi-xhs)，
   Fire TV 上用 Downloader 输入
   `https://github.com/lofxf/xhs-android-tv/releases/download/fongmi-xhs/XhsTV-leanback-armeabi-v7a.apk`
-  （只构建 leanback armeabi-v7a 一个版本，Fire TV 通用）。
-- 签名：在仓库 Settings → Secrets and variables → Actions 设置 `FONGMI_KEYSTORE_BASE64`（keystore 的 base64）、
+- 首次打开后在「设置 → 点播」填入 `https://raw.githubusercontent.com/lofxf/xhs-android-tv/dist/config.json`。
+- 签名：在仓库 Settings → Secrets and variables → Actions 设置 `FONGMI_KEYSTORE_BASE64`（keystore 的 base64，JKS 或 PKCS12）、
   `FONGMI_KEYSTORE_PASSWORD`、`FONGMI_KEY_ALIAS` 后，每次构建签名一致、可直接覆盖升级；
   未设置时 CI 使用一次性临时证书，升级前需先卸载旧版。
-- 升级 FongMi 版本：修改 `fongmi/REF` 为新的 commit 并推送到 main。
-- FongMi/TV 采用 GPL-3.0 协议，本改版同样遵循 GPL-3.0，补丁即全部改动。
+- 升级 FongMi 版本：修改 `fongmi/VERSION` 并推送到 main。
+- FongMi/TV 采用 GPL-3.0 协议，本改版同样遵循 GPL-3.0。
