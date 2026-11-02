@@ -59,7 +59,29 @@ for strings in root.glob("res/values*/strings.xml"):
         strings.write_text(t, encoding="utf-8")
         print("app_name:", strings.relative_to(root))
 
-# 4. Icon / banner drawables.
+# 4. Restore attrs stripped by R8 resource shrinking but still referenced from XML
+#    (e.g. app:state_liftable / state_dragged), otherwise aapt2 fails to relink.
+RES_AUTO = "http://schemas.android.com/apk/res-auto"
+attrs_file = root / "res" / "values" / "attrs.xml"
+defined_attrs = set(re.findall(r'<attr name="([^"]+)"', attrs_file.read_text(encoding="utf-8"))) if attrs_file.exists() else set()
+used = set()
+for xml in (root / "res").rglob("*.xml"):
+    if "/values" in str(xml.parent):
+        continue
+    text = xml.read_text(encoding="utf-8", errors="ignore")
+    for prefix in re.findall(r'xmlns:(\w+)="' + re.escape(RES_AUTO) + '"', text):
+        used.update(re.findall(r"\b" + prefix + r":(state_\w+)=", text))
+missing = sorted(used - defined_attrs)
+if missing:
+    if attrs_file.exists():
+        a = attrs_file.read_text(encoding="utf-8")
+    else:
+        a = '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n</resources>\n'
+    extra = "".join(f'    <attr name="{n}" format="boolean" />\n' for n in missing)
+    attrs_file.write_text(a.replace("</resources>", extra + "</resources>", 1), encoding="utf-8")
+print("restored attrs:", missing)
+
+# 5. Icon / banner drawables.
 dst = root / "res" / "drawable-nodpi"
 dst.mkdir(parents=True, exist_ok=True)
 for name in ("xhs_icon.png", "xhs_banner.png"):
