@@ -53,6 +53,7 @@ jobs:
           BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
           echo "build-tools: $BT"
           if [ -n "$KEYSTORE_B64" ]; then
+            echo "使用仓库 Secrets 中的固定签名证书"
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.ks"
           else
             echo "::warning::未设置 FONGMI_KEYSTORE_BASE64，使用临时签名证书，升级前需卸载旧版"
