@@ -56,11 +56,11 @@ public final class XhsApi {
         public String nickname = "", avatar = "", userId = "";
     }
 
-    private final XhsSigner signer;
+    private final XhsPage page;
 
     public XhsApi(Context context) {
-        signer = new XhsSigner(context);
-        signer.start();
+        page = new XhsPage(context);
+        page.start();
     }
 
     // ---------------------------------------------------------------- account
@@ -98,7 +98,7 @@ public final class XhsApi {
         if (s.codeStatus == 2) {
             if (session.length() > 0) setCookie("web_session", session);
             CookieManager.getInstance().flush();
-            signer.reload();
+            page.reload();
         }
         return s;
     }
@@ -106,7 +106,7 @@ public final class XhsApi {
     public void logout() {
         setCookie("web_session", "");
         CookieManager.getInstance().flush();
-        signer.reload();
+        page.reload();
     }
 
     // ---------------------------------------------------------------- content
@@ -147,41 +147,91 @@ public final class XhsApi {
     }
 
     public Detail detail(String noteId, String xsecToken) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("source_note_id", noteId);
-        b.put("image_formats", new JSONArray().put("jpg").put("webp").put("avif"));
-        b.put("extra", new JSONObject().put("need_body_topic", "1"));
-        b.put("xsec_source", "pc_feed");
-        b.put("xsec_token", xsecToken == null ? "" : xsecToken);
-        JSONObject d = post("/api/sns/web/v1/feed", b);
-        JSONArray items = d.optJSONArray("items");
-        if (items == null || items.length() == 0) throw new Exception("笔记不存在或已删除");
-        JSONObject card = items.getJSONObject(0).optJSONObject("note_card");
-        if (card == null) throw new Exception("笔记不存在或已删除");
+        Exception ssrError = null;
+        try {
+            Detail d = detailFromHtml(noteId, xsecToken);
+            if (d != null && !d.streams.isEmpty()) return d;
+        } catch (Exception e) {
+            ssrError = e;
+        }
+        try {
+            JSONObject b = new JSONObject();
+            b.put("source_note_id", noteId);
+            b.put("image_formats", new JSONArray().put("jpg").put("webp").put("avif"));
+            b.put("extra", new JSONObject().put("need_body_topic", "1"));
+            b.put("xsec_source", "pc_feed");
+            b.put("xsec_token", xsecToken == null ? "" : xsecToken);
+            JSONObject d = post("/api/sns/web/v1/feed", b);
+            JSONArray items = d.optJSONArray("items");
+            if (items == null || items.length() == 0) throw new Exception("笔记不存在或已删除");
+            JSONObject card = items.getJSONObject(0).optJSONObject("note_card");
+            if (card == null) throw new Exception("笔记不存在或已删除");
+            return parseCard(noteId, card);
+        } catch (Exception e) {
+            if (ssrError != null && !(e instanceof NotLoggedInException)) throw new Exception(e.getMessage() + "；网页解析: " + ssrError.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Reads the note from the server-rendered page ({@code window.__INITIAL_STATE__}); this needs
+     * no API signature at all.
+     */
+    private Detail detailFromHtml(String noteId, String xsecToken) throws Exception {
+        String url = ORIGIN + "/explore/" + noteId + "?xsec_token=" + Http.encode(xsecToken == null ? "" : xsecToken)
+                + "&xsec_source=pc_feed";
+        Map<String, String> h = new HashMap<String, String>();
+        h.put("User-Agent", Http.DESKTOP_UA);
+        h.put("Referer", ORIGIN + "/explore");
+        h.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        h.put("Accept-Language", "zh-CN,zh;q=0.9");
+        h.put("Cookie", cookieHeader());
+        Http.Response r = Http.get(url, h);
+        for (String sc : r.header("Set-Cookie")) CookieManager.getInstance().setCookie(ORIGIN, sc);
+        String marker = "window.__INITIAL_STATE__=";
+        int i = r.body.indexOf(marker);
+        if (i < 0) throw new Exception("页面无数据 (HTTP " + r.code + ")");
+        int end = r.body.indexOf("</script>", i);
+        String js = r.body.substring(i + marker.length(), end < 0 ? r.body.length() : end).trim();
+        if (js.endsWith(";")) js = js.substring(0, js.length() - 1);
+        js = js.replaceAll("(?<=[:\\[,])undefined(?=[,}\\]])", "null");
+        JSONObject state = new JSONObject(js);
+        JSONObject noteState = state.optJSONObject("note");
+        JSONObject map = noteState == null ? null : noteState.optJSONObject("noteDetailMap");
+        if (map == null) throw new Exception("页面无笔记数据");
+        JSONObject entry = map.optJSONObject(noteId);
+        if (entry == null && map.length() > 0) entry = map.optJSONObject(map.keys().next());
+        JSONObject note = entry == null ? null : entry.optJSONObject("note");
+        if (note == null || note.length() == 0) throw new Exception("页面无笔记数据（可能需要登录或已删除）");
+        return parseCard(noteId, note);
+    }
+
+    /** Parses a note card in either API (snake_case) or page-state (camelCase) form. */
+    private static Detail parseCard(String noteId, JSONObject card) {
         Detail det = new Detail();
         det.id = noteId;
-        det.title = card.optString("title");
-        det.desc = card.optString("desc");
-        JSONObject user = card.optJSONObject("user");
-        det.author = user == null ? "" : first(user.optString("nickname"), user.optString("nick_name"));
-        JSONObject interact = card.optJSONObject("interact_info");
-        det.likes = interact == null ? "" : interact.optString("liked_count");
-        JSONArray images = card.optJSONArray("image_list");
+        det.title = str(card, "title");
+        det.desc = str(card, "desc");
+        JSONObject user = obj(card, "user");
+        det.author = user == null ? "" : first(str(user, "nickname"), str(user, "nick_name"));
+        JSONObject interact = obj(card, "interact_info", "interactInfo");
+        det.likes = interact == null ? "" : str(interact, "liked_count", "likedCount");
+        JSONArray images = arr(card, "image_list", "imageList");
         if (images != null && images.length() > 0) {
-            JSONObject img = images.getJSONObject(0);
-            det.cover = first(img.optString("url_default"), img.optString("url_pre"), img.optString("url"));
+            JSONObject img = images.optJSONObject(0);
+            if (img != null) det.cover = first(str(img, "url_default", "urlDefault"), str(img, "url_pre", "urlPre"), str(img, "url"));
         }
-        JSONObject video = card.optJSONObject("video");
+        JSONObject video = obj(card, "video");
         if (video != null) {
-            JSONObject stream = video.optJSONObject("media") == null ? null
-                    : video.optJSONObject("media").optJSONObject("stream");
+            JSONObject media = obj(video, "media");
+            JSONObject stream = media == null ? null : obj(media, "stream");
             if (stream != null) {
-                addStreams(det, "H264", stream.optJSONArray("h264"));
-                addStreams(det, "H265", stream.optJSONArray("h265"));
-                addStreams(det, "AV1", stream.optJSONArray("av1"));
+                addStreams(det, "H264", arr(stream, "h264"));
+                addStreams(det, "H265", arr(stream, "h265"));
+                addStreams(det, "AV1", arr(stream, "av1"));
             }
-            JSONObject consumer = video.optJSONObject("consumer");
-            String key = consumer == null ? "" : consumer.optString("origin_video_key");
+            JSONObject consumer = obj(video, "consumer");
+            String key = consumer == null ? "" : str(consumer, "origin_video_key", "originVideoKey");
             if (key.length() > 0) {
                 List<String> l = new ArrayList<String>();
                 l.add("https://sns-video-bd.xhscdn.com/" + key);
@@ -192,15 +242,36 @@ public final class XhsApi {
         return det;
     }
 
+    static String str(JSONObject o, String... keys) {
+        for (String k : keys) {
+            Object v = o.opt(k);
+            if (v != null && v != JSONObject.NULL) {
+                String s = String.valueOf(v);
+                if (s.length() > 0) return s;
+            }
+        }
+        return "";
+    }
+
+    static JSONObject obj(JSONObject o, String... keys) {
+        for (String k : keys) if (o.optJSONObject(k) != null) return o.optJSONObject(k);
+        return null;
+    }
+
+    static JSONArray arr(JSONObject o, String... keys) {
+        for (String k : keys) if (o.optJSONArray(k) != null) return o.optJSONArray(k);
+        return null;
+    }
+
     private static void addStreams(Detail det, String codec, JSONArray arr) {
         if (arr == null) return;
         for (int i = 0; i < arr.length(); i++) {
             JSONObject s = arr.optJSONObject(i);
             if (s == null) continue;
             List<String> urls = new ArrayList<String>();
-            String master = s.optString("master_url");
+            String master = str(s, "master_url", "masterUrl");
             if (master.length() > 0) urls.add(master);
-            JSONArray backups = s.optJSONArray("backup_urls");
+            JSONArray backups = arr(s, "backup_urls", "backupUrls");
             if (backups != null) for (int k = 0; k < backups.length(); k++) urls.add(backups.optString(k));
             if (urls.isEmpty()) continue;
             int height = Math.min(s.optInt("width"), s.optInt("height"));
@@ -245,51 +316,69 @@ public final class XhsApi {
 
     private JSONObject get(String path, Map<String, String> query) throws Exception {
         StringBuilder uri = new StringBuilder(path);
+        JSONObject args = new JSONObject();
         if (query != null && !query.isEmpty()) {
             char sep = '?';
             for (Map.Entry<String, String> e : query.entrySet()) {
                 uri.append(sep).append(e.getKey()).append('=').append(Http.encode(e.getValue()));
+                args.put(e.getKey(), e.getValue());
                 sep = '&';
             }
         }
-        XhsSigner.Signature sig = signer.sign(uri.toString(), null);
-        return check(Http.get(API + uri, headers(sig)));
+        return call("GET", path, uri.toString(), query == null || query.isEmpty() ? null : args.toString());
     }
 
     private JSONObject post(String path, JSONObject body) throws Exception {
-        XhsSigner.Signature sig = signer.sign(path, body.toString());
-        Map<String, String> h = headers(sig);
-        h.put("Content-Type", "application/json;charset=UTF-8");
-        // Send exactly the JSON string that was signed.
-        return check(Http.post(API + path, h, sig.body != null ? sig.body : body.toString()));
+        return call("POST", path, path, body.toString());
     }
 
-    private Map<String, String> headers(XhsSigner.Signature sig) {
-        Map<String, String> h = new HashMap<String, String>();
-        h.put("User-Agent", Http.DESKTOP_UA);
-        h.put("Origin", ORIGIN);
-        h.put("Referer", ORIGIN + "/");
-        h.put("Accept", "application/json, text/plain, */*");
-        h.put("Cookie", cookieHeader());
-        h.put("x-s", sig.xs);
-        h.put("x-t", sig.xt);
-        h.put("x-s-common", XsCommon.build(cookie("a1"), sig.b1, sig.xs, sig.xt));
-        return h;
-    }
-
-    private JSONObject check(Http.Response r) throws Exception {
-        for (String sc : r.header("Set-Cookie")) CookieManager.getInstance().setCookie(ORIGIN, sc);
-        if (r.code == 461 || r.code == 471) throw new Exception("小红书触发了安全验证，请稍后再试或在手机端打开一次小红书");
-        JSONObject o;
+    /**
+     * Runs the request inside the real web page: first through the site's own API function,
+     * then (if not found) through an in-page fetch signed with window._webmsxyw.
+     */
+    private JSONObject call(String method, String path, String uri, String json) throws Exception {
+        XhsPage.Result r = null;
         try {
-            o = new JSONObject(r.body);
-        } catch (Exception e) {
-            throw new Exception("小红书接口返回异常 (HTTP " + r.code + ")");
+            r = page.callPageApi(path, json);
+        } catch (Exception ignored) {
         }
-        if (!o.optBoolean("success", false)) {
-            int code = o.optInt("code");
+        if (r == null) {
+            XhsPage.Signature sig = page.sign(uri, "POST".equals(method) ? json : null);
+            Map<String, String> h = new HashMap<String, String>();
+            h.put("Accept", "application/json, text/plain, */*");
+            h.put("x-s", sig.xs);
+            h.put("x-t", sig.xt);
+            h.put("x-s-common", XsCommon.build(cookie("a1"), sig.b1, sig.xs, sig.xt));
+            if ("POST".equals(method)) h.put("Content-Type", "application/json;charset=UTF-8");
+            r = page.fetch(method, uri, h, "POST".equals(method) ? (sig.body != null ? sig.body : json) : null);
+            if (r == null) throw new Exception("小红书网页调用失败");
+        }
+        return check(r);
+    }
+
+    private JSONObject check(XhsPage.Result r) throws Exception {
+        CookieManager.getInstance().flush();
+        Object p = r.payload;
+        JSONObject o = p instanceof JSONObject ? (JSONObject) p : null;
+        int code = o == null ? 0 : o.optInt("code", 0);
+        if (r.status == 461 || r.status == 471 || code == 461 || code == 471 || code == 300011 || code == 300012) {
+            throw new Exception("小红书触发了安全验证（" + r.via + " " + (r.status != 0 ? r.status : code)
+                    + "）。请在手机或电脑浏览器登录一次小红书网页版完成验证后再试");
+        }
+        if (o == null) {
+            if (r.ok && p != null && p != JSONObject.NULL) return new JSONObject().put("value", p);
+            throw new Exception("小红书接口异常（" + r.via + " HTTP " + r.status + "）" + (r.message.length() > 0 ? ": " + r.message : ""));
+        }
+        boolean wrapped = o.has("success") || o.has("code") && o.has("data");
+        if (!wrapped) {
+            if (r.ok) return o; // the site's API function already returned the data object
+            String msg = first(str(o, "msg"), str(o, "message"), r.message);
             if (code == -100 || code == -101 || code == -104) throw new NotLoggedInException();
-            String msg = o.optString("msg");
+            throw new Exception("小红书: " + (msg.length() > 0 ? msg : "请求失败") + "（" + r.via + " " + r.status + "）");
+        }
+        if (!o.optBoolean("success", code == 0)) {
+            if (code == -100 || code == -101 || code == -104) throw new NotLoggedInException();
+            String msg = first(str(o, "msg"), str(o, "message"));
             throw new Exception(msg.length() > 0 ? "小红书: " + msg : "小红书接口错误 (" + code + ")");
         }
         JSONObject data = o.optJSONObject("data");
