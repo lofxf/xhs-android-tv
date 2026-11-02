@@ -85,7 +85,7 @@ config.template.json
 - 下载：[Releases → fongmi-xhs](https://github.com/lofxf/xhs-android-tv/releases/tag/fongmi-xhs)，
   Fire TV 上用 Downloader 输入
   `https://github.com/lofxf/xhs-android-tv/releases/download/fongmi-xhs/XhsTV-leanback-armeabi-v7a.apk`
-  （Fire TV 多为 32 位系统，选 armeabi-v7a）。
+  （只构建 leanback armeabi-v7a 一个版本，Fire TV 通用）。
 - 签名：在仓库 Settings → Secrets and variables → Actions 设置 `FONGMI_KEYSTORE_BASE64`（keystore 的 base64）、
   `FONGMI_KEYSTORE_PASSWORD`、`FONGMI_KEY_ALIAS` 后，每次构建签名一致、可直接覆盖升级；
   未设置时 CI 使用一次性临时证书，升级前需先卸载旧版。

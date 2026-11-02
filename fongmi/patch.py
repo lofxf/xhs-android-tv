@@ -54,3 +54,6 @@ for src, dst in [("xhs_icon.png", "app/src/main/res/drawable-nodpi/xhs_icon.png"
 edit("app/src/main/AndroidManifest.xml", 'android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/xhs_icon"')
 edit("app/src/main/AndroidManifest.xml", 'android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/xhs_icon"')
 edit("app/src/leanback/AndroidManifest.xml", 'android:banner="@mipmap/ic_banner"', 'android:banner="@drawable/xhs_banner"')
+
+# 5. Only build the armeabi-v7a APK (Fire TV); halves build time.
+edit("app/build.gradle", 'include "arm64-v8a", "armeabi-v7a"', 'include "armeabi-v7a"')
