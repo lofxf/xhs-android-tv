@@ -56,11 +56,26 @@ public class Xhs extends Spider {
 
             @Override
             public int poll() throws Exception {
-                int s = api.qrStatus(qr).codeStatus;
+                int s;
+                try {
+                    s = api.qrStatus(qr).codeStatus;
+                } catch (Exception e) {
+                    // The status call can fail right after confirmation; trust the account state.
+                    if (loggedIn()) return QrLogin.SUCCESS;
+                    throw e;
+                }
                 if (s == 0) return QrLogin.WAITING;
-                if (s == 1) return QrLogin.SCANNED;
+                if (s == 1) return loggedIn() ? QrLogin.SUCCESS : QrLogin.SCANNED;
                 if (s == 2) return QrLogin.SUCCESS;
-                return QrLogin.EXPIRED;
+                return loggedIn() ? QrLogin.SUCCESS : QrLogin.EXPIRED;
+            }
+
+            private boolean loggedIn() {
+                try {
+                    return !api.me().guest;
+                } catch (Exception e) {
+                    return false;
+                }
             }
 
             @Override
